@@ -2,13 +2,13 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package dblike;
+package blackbox;
 
 /**
- *
- * @author Jeffery
+ * 
+ * @author 
  */
-public class DBLike {
+public class TestDriver {
 
     /**
      * @param args the command line arguments
