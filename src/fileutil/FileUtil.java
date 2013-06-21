@@ -1,8 +1,12 @@
 package fileutil;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
 
@@ -23,21 +27,22 @@ public class FileUtil {
          */
 	public static byte[][] splitFile(String path) {
             byte[][] chunks = null;
-            byte[] totalBytes = null; // total bytes of the file
+            long fileSize = 0; // total bytes of the file
             int chunksCount = 0; // how many chunks the file can be splited up to
+            File file;
+            FileInputStream fileIs;
             try {
-               totalBytes = Files.readAllBytes(Paths.get(path));
-            } catch (OutOfMemoryError outEx) {
-                System.out.println("[Error]The file " + path + "is too large to load: ");
-                return null;
+                file = new File(path);
+                fileSize = file.length();
+                fileIs = new FileInputStream(file);
             } catch (IOException ex) {
-                System.out.println("IOException: fail to read the file:" + path);
+                System.out.println("IOException: fail to open inputstream for the file:" + path);
                 return null;
             }
-            if (totalBytes.length <= CHUNK_SIZE) {
+            if (fileSize <= CHUNK_SIZE) {
                 chunksCount = 1;
             } else {
-                int rest = totalBytes.length;
+                long rest = fileSize;
                 while (rest >= CHUNK_SIZE) {
                     chunksCount++;
                     rest -= CHUNK_SIZE;
@@ -50,14 +55,16 @@ public class FileUtil {
             for (int i = 0; i < chunksCount; i++) {
                 int chunkSize;
                 if ( i + 1 == chunksCount) {
-                    chunkSize = totalBytes.length - i * CHUNK_SIZE;
+                    chunkSize = (int) (fileSize - i * CHUNK_SIZE);
                 } else {
                     chunkSize = CHUNK_SIZE;
                 }
                 chunks[i] = new byte[chunkSize];
-                /* copy all bytes */
-                for (int j = 0; j < chunkSize; j++) {
-                    chunks[i][j] = totalBytes[i * CHUNK_SIZE + j];
+                try {
+                    /* copy all bytes */
+                    fileIs.read(chunks[i]);
+                } catch (IOException ex) {
+                    System.out.println("IOException: fail to read the file:" + path);
                 }
             }
             return chunks;
