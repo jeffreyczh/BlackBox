@@ -4,6 +4,8 @@
  */
 package blackbox;
 
+import fileutil.FileUtil;
+
 /**
  * 
  * @author 
@@ -14,6 +16,6 @@ public class TestDriver {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        // TODO code application logic here
+       FileUtil.watchFiles("D:\\test");
     }
 }
