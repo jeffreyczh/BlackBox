@@ -5,7 +5,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
-import java.nio.file.FileVisitor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,8 +15,6 @@ import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
 
@@ -107,7 +104,6 @@ public class FileUtil {
                                 registerWatchService(tempFile.toPath(),
                                                      keyMap,
                                                      watchService);
-                                continue;
                             }
                             if ( event.kind().name().equals("ENTRY_MODIFY") ) {
                                 /* ignore the folder modification event */
@@ -121,6 +117,7 @@ public class FileUtil {
                 }
             } catch (IOException ex) {
                 System.out.println("IOException: fail to traverse the folder:" + folderPath);
+                ex.printStackTrace();
             } catch (InterruptedException ex) {
                 System.out.println("InterruptedException: fail to watch the folder:" + folderPath);
             }
@@ -148,5 +145,21 @@ public class FileUtil {
                         return FileVisitResult.CONTINUE;
                     }
                 });
+        }
+        /**
+         * parse the path of the client file
+         * to the corresponding path of the server file
+         * now we just assume all clients run on Windows
+         * and all servers run on Linux
+         * @param path
+         * @param userName
+         * @return 
+         */
+        public static String parsePath(String path, String userName) {
+            /* remove the root from the path */
+            String subPath = path.substring(15);
+            /* add the user name at the front of the path */
+            String newPath = "\\" + userName + subPath;
+            return newPath;
         }
 }
