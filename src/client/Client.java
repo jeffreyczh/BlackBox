@@ -6,7 +6,7 @@ import java.nio.file.Paths;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
-import rmiClass.LoginControl;
+import rmiClass.RedirectorControl;
 
 /**
  *
@@ -14,8 +14,8 @@ import rmiClass.LoginControl;
  */
 public class Client {
     private String userName;
-    private ArrayList<String> ipList = new ArrayList<>(3); // list of all ip addresses of servers
-    private int whichIP = 0; // the index of IP in the ip list that this client connects to
+    private ArrayList<String> redirectorList = new ArrayList<>(3); // list of all ip addresses of re-director
+    private int whichIP = 0; // the index of re-director IP that this client connects to
     
     /**
      * Constructor
@@ -23,7 +23,9 @@ public class Client {
      * @param rootPath the root path of the sync folder, eg. "C:"
      */
     public Client(String userName, String rootPath) {
-        ipList.add("23.21.222.40");
+        redirectorList.add("23.21.222.40");
+        redirectorList.add("54.234.9.61");
+        redirectorList.add("23.22.127.255");
         
         /* log in and validate the user name first */
         if ( ! logIn(userName) ) {
@@ -33,6 +35,7 @@ public class Client {
         /* install the file watcher to listen to files status */
         FileUtil.watchFiles(Paths.get(rootPath, "blackboxsync").toString());
     }
+    
     /**
      * connect to the server and log in
      * @param userName
@@ -40,19 +43,19 @@ public class Client {
      */
     private boolean logIn(String userName) {
          while (true) {
-            String ipAddr = ipList.get(whichIP % 3);
+            String ipAddr = redirectorList.get(whichIP % 3);
             try {
                 /* log in and validate the user name */
-                LoginControl loginCtrl = (LoginControl) Naming.lookup("rmi://" + ipAddr + ":51966/Login");
-                if (!loginCtrl.validate(userName)) {
+                RedirectorControl rdCtrl = (RedirectorControl) Naming.lookup("rmi://" + ipAddr + ":51966/Redirect");
+                if (!rdCtrl.login(userName)) {
                     System.out.println("Fail to log in: user name is not correct");
                     return false;
                 }
-                System.out.println("Login success!");
+                System.out.println("Login successfully!");
                 return true;
             } catch (RemoteException ex) {
                 /* the server may fail, connect to another server */
-                System.out.println("Server: " + ipAddr + " has no response. Change to another server.");
+                System.out.println("Re-director: " + ipAddr + " has no response. Change to another Re-director.");
                 whichIP++;
             }  catch (Exception e) {
                 e.printStackTrace();

@@ -2,6 +2,7 @@ package fileutil;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
@@ -28,9 +29,10 @@ public class FileUtil {
 	
         /**
          * split up the file to chunks
+         * and make all these chunks to files
          * every chunk is 4MB
          * @param path the full file path
-         * @return an array of chunk
+         * @return an array of small files
          * @throws IOException 
          */
 	public static byte[][] splitFile(String path) {
@@ -110,6 +112,21 @@ public class FileUtil {
                                 continue;
                             }
                         }
+                        if ( event.kind().name().equals("ENTRY_MODIFY") ) {
+                            /*
+                             * a file is (being) modified
+                             * check whether the modification completes or not
+                             */
+                            try {
+                                /* if the function fails, the file is still being modified */
+                                Thread.sleep(1000);
+                                 FileInputStream fis = new FileInputStream(tempFile);
+                                 fis.close();
+                            } catch (FileNotFoundException fileEx) {
+                                continue;
+                            }
+
+                        }
                         /* belows are how we gonna deal with each event */
                         System.out.println(tempFileFullPath + " has: " + event.kind());
                     }
@@ -159,7 +176,21 @@ public class FileUtil {
             /* remove the root from the path */
             String subPath = path.substring(15);
             /* add the user name at the front of the path */
-            String newPath = "\\" + userName + subPath;
+            String newPath = userName + subPath;
             return newPath;
+        }
+        
+        public static SmallFile[] createSmalFiles(String path, String userName) {
+            byte[][] chunks = splitFile(path);
+            SmallFile[] smallfiles = new SmallFile[chunks.length];
+            String newPath = parsePath(path, userName);
+            for ( int i = 0; i < chunks.length; i++ ) {
+                /* name the small files */
+                Integer pieceIndex = i + 1;
+                String fileName = newPath + ".td" + pieceIndex.toString(); // the format is "full file name.td1", for example
+                FilePair pair = new FilePair(fileName, MD5Calculator.getMD5(chunks[i]));
+                smallfiles[i] = new SmallFile(pair, chunks[i]);
+            }
+            return smallfiles;
         }
 }

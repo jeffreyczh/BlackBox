@@ -1,6 +1,5 @@
-package server;
+package fileutil;
 
-import fileutil.FilePair;
 import java.util.ArrayList;
 import java.util.Date;
 
@@ -21,6 +20,9 @@ public class FileInfo {
     }
     public ArrayList<FilePair> getPartList() {
         return partList;
+    }
+    public void setPartList(ArrayList<FilePair> partList) {
+        this.partList = partList;
     }
     /**
      * update the synchronization time
