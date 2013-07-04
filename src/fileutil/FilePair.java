@@ -1,11 +1,13 @@
 package fileutil;
 
+import java.io.Serializable;
+
 /**
  * This is the object that matchs a file name with its MD5
  * @author
  */
-public class FilePair {
-    private String fileName;
+public class FilePair implements Serializable {
+    private String fileName; // the file name with full path in MD5 format
     private String md5Str;
     
     public FilePair(String fileName, String md5Str) {

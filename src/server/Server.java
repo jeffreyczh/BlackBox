@@ -3,6 +3,7 @@ package server;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
@@ -10,7 +11,6 @@ import java.rmi.registry.LocateRegistry;
 import java.util.ArrayList;
 import javax.swing.Timer;
 import rmiClass.RedirectorControl;
-import rmiClass.ServerControl;
 
 /**
  *
@@ -28,6 +28,9 @@ public class Server {
        redirectorList.add("54.234.9.61");
        redirectorList.add("23.22.127.255");
        
+       String[] userName = new String[] {"user1", "user2"};
+       checkUserFolder(userName);
+       
        serverctrl = new ServerControlImpl();
        LocateRegistry.createRegistry(47805);
        try {
@@ -37,8 +40,8 @@ public class Server {
                System.exit(1);
        }
        
-       sendHeartbeat(); // get the return value to sync amoung servers
-       initHeartbeatTimer();
+       //sendHeartbeat(); // get the return value to sync amoung servers
+       //initHeartbeatTimer();
        
        System.out.println("Server is ready!");
     }
@@ -63,5 +66,19 @@ public class Server {
                        sendHeartbeat();
                     }
                 }).start();
+    }
+    
+    /**
+     * check whether the folders which stores each user's files exists
+     * if not, create the folder
+     * @param userName 
+     */
+    private void checkUserFolder(String[] userName) {
+        for (int i = 0; i < userName.length; i++) {
+            File folder = new File(userName[i]);
+            if ( ! folder.exists() ) {
+                folder.mkdir();
+            }
+        }
     }
 }

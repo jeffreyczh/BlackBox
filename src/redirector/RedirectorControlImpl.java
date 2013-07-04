@@ -115,8 +115,10 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
         synchronized(serverTable) {
             ArrayList<Integer> values = new ArrayList<>(serverTable.values());
             int minLoad = values.get(0);
-            for (int i = 1; i < values.size(); i++) {
-                minLoad = Math.min(minLoad, values.get(i));
+            if (values.size() > 1) {
+                for (int i = 1; i < values.size(); i++) {
+                    minLoad = Math.min(minLoad, values.get(i));
+                }
             }
             Iterator it = serverTable.keySet().iterator();
             while (it.hasNext()) {

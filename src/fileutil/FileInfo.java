@@ -1,19 +1,32 @@
 package fileutil;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Date;
 
 /**
  * This stores the overall information of a file
  */
-public class FileInfo {
-    private String fileName; // file name
+public class FileInfo implements Serializable {
+    private String fileName; // file name (MD5)
+    private String originalFileName; // the original file name
     private ArrayList<FilePair> partList; // list of all parts of this file
     private long syncTime; // the server time of the last synchronization time
     
     public FileInfo(String fileName, ArrayList<FilePair> partList) {
-        this.fileName = fileName;
+        originalFileName = fileName;
+        this.fileName = MD5Calculator.getMD5(originalFileName.getBytes());
         this.partList = partList;
+    }
+    public FileInfo(String fileName, SmallFile[] pieces) {
+        this.fileName = fileName;
+        partList = new ArrayList<>(pieces.length);
+        for ( int i = 0; i < pieces.length; i++ ) {
+            partList.add(pieces[i].getFilePair());
+        }
+    }
+    public String getOriginalFileName() {
+        return originalFileName;
     }
     public String getFileName() {
         return fileName;

@@ -1,20 +1,18 @@
 
 package rmiClass;
 
+import common.ActionPair;
 import fileutil.FileInfo;
-import fileutil.FilePair;
-import java.io.File;
+import fileutil.SmallFile;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
-import java.util.ArrayList;
 
 /**
  *
  * @author
  */
 public interface ServerControl extends Remote{
-    public ArrayList<FilePair> checkFileInfo(FileInfo fileInfo) throws RemoteException;
-    public void sendFile(File file) throws RemoteException;
-    public void addLoad(int load) throws RemoteException;
+    public ActionPair checkFileInfo(String userName, FileInfo fileInfo) throws RemoteException;
+    public void sendChunk(ActionPair actionPair, SmallFile chunk, boolean isLastChunk) throws RemoteException;
     public int getLoad() throws RemoteException;
 }

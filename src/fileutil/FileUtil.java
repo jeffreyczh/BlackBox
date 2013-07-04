@@ -16,6 +16,8 @@ import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
 
@@ -35,18 +37,12 @@ public class FileUtil {
          * @return an array of small files
          * @throws IOException 
          */
-	public static byte[][] splitFile(String path) {
+	public static byte[][] splitFile(String path) throws IOException {
             byte[][] chunks = null;
             int chunksCount = 0; // how many chunks the file can be splited up to
             File file = new File(path);
             long fileSize = file.length(); // total bytes of the file
-            FileInputStream fileIs;
-            try {
-                fileIs = new FileInputStream(file);
-            } catch (IOException ex) {
-                System.out.println("IOException: fail to open inputstream for the file:" + path);
-                return null;
-            }
+            FileInputStream fileIs = new FileInputStream(file);
             if (fileSize <= CHUNK_SIZE) {
                 chunksCount = 1;
             } else {
@@ -68,13 +64,10 @@ public class FileUtil {
                     chunkSize = CHUNK_SIZE;
                 }
                 chunks[i] = new byte[chunkSize];
-                try {
-                    /* copy all bytes */
-                    fileIs.read(chunks[i]);
-                } catch (IOException ex) {
-                    System.out.println("IOException: fail to read the file:" + path);
-                }
+                /* copy all bytes */
+                fileIs.read(chunks[i]);
             }
+            fileIs.close();
             return chunks;
 	}
         /**
@@ -82,7 +75,7 @@ public class FileUtil {
          * status includes creation, modification and deletion
          * @param folderPath the path of the folder that is watched
          */
-        public static void watchFiles(String folderPath) {
+        public static void watchFiles(String folderPath, FileOps fileOps) {
             try {
                 // temporary put this function here, may change
                 final WatchService watchService = FileSystems.getDefault().newWatchService();
@@ -106,6 +99,7 @@ public class FileUtil {
                                 registerWatchService(tempFile.toPath(),
                                                      keyMap,
                                                      watchService);
+                                continue;
                             }
                             if ( event.kind().name().equals("ENTRY_MODIFY") ) {
                                 /* ignore the folder modification event */
@@ -128,7 +122,9 @@ public class FileUtil {
 
                         }
                         /* belows are how we gonna deal with each event */
-                        System.out.println(tempFileFullPath + " has: " + event.kind());
+                        fileOps.setEventName(event.kind().name());
+                        fileOps.setFile(tempFile);
+                        new Thread(fileOps).start();
                     }
                     key.reset();
                 }
@@ -165,31 +161,38 @@ public class FileUtil {
         }
         /**
          * parse the path of the client file
-         * to the corresponding path of the server file
+         * eg. D:\blackboxsync\hello\test.txt will become
+         * \hello\test.txt
          * now we just assume all clients run on Windows
-         * and all servers run on Linux
          * @param path
          * @param userName
          * @return 
          */
-        public static String parsePath(String path, String userName) {
-            /* remove the root from the path */
-            String subPath = path.substring(15);
-            /* add the user name at the front of the path */
-            String newPath = userName + subPath;
+        public static String parsePath(String path) {
+            /* remove the root and the blackboxsync folder from the path */
+            String newPath = path.substring(15);
             return newPath;
         }
         
-        public static SmallFile[] createSmalFiles(String path, String userName) {
-            byte[][] chunks = splitFile(path);
+        public static SmallFile[] createSmallFiles(String path) {
+            byte[][] chunks = null;
+            try {
+                chunks = splitFile(path);
+            } catch (IOException ex) {
+                System.out.println("Fail to split up the file :" + path);
+                return null;
+            }
             SmallFile[] smallfiles = new SmallFile[chunks.length];
-            String newPath = parsePath(path, userName);
+            String newPath = parsePath(path);
             for ( int i = 0; i < chunks.length; i++ ) {
                 /* name the small files */
                 Integer pieceIndex = i + 1;
                 String fileName = newPath + ".td" + pieceIndex.toString(); // the format is "full file name.td1", for example
-                FilePair pair = new FilePair(fileName, MD5Calculator.getMD5(chunks[i]));
-                smallfiles[i] = new SmallFile(pair, chunks[i]);
+                FilePair pair = new FilePair(MD5Calculator.getMD5(fileName.getBytes()), 
+                                             MD5Calculator.getMD5(chunks[i]));
+                smallfiles[i] = new SmallFile(pair, 
+                                              MD5Calculator.getMD5(path.getBytes()), 
+                                              chunks[i]);
             }
             return smallfiles;
         }

@@ -22,18 +22,19 @@ public class Client {
      * @param userName
      * @param rootPath the root path of the sync folder, eg. "C:"
      */
-    public Client(String userName, String rootPath) {
+    public Client(String userName, String rootPath) throws RemoteException {
+        
         redirectorList.add("23.21.222.40");
         redirectorList.add("54.234.9.61");
         redirectorList.add("23.22.127.255");
         
         /* log in and validate the user name first */
-        if ( ! logIn(userName) ) {
+        /*if ( ! logIn(userName) ) {
             System.exit(1);
-        }
+        }*/
         this.userName = userName;
         /* install the file watcher to listen to files status */
-        FileUtil.watchFiles(Paths.get(rootPath, "blackboxsync").toString());
+        FileUtil.watchFiles(Paths.get(rootPath, "blackboxsync").toString(), new ClientFileOps(userName, redirectorList));
     }
     
     /**
