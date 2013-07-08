@@ -1,52 +1,84 @@
 package fileutil;
 
 import java.io.Serializable;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.Objects;
 
 /**
  * This stores the overall information of a file
  */
 public class FileInfo implements Serializable {
-    private String fileName; // file name (MD5)
-    private String originalFileName; // the original file name
-    private ArrayList<FilePair> partList; // list of all parts of this file
+    private String subpath; // the subpath of the file under the sync folder
+    private String MD5Name; // the MD5 of the subpath
+    private ArrayList<FilePair> chunkList; // list of all parts of this file
     private long syncTime; // the server time of the last synchronization time
     
-    public FileInfo(String fileName, ArrayList<FilePair> partList) {
-        originalFileName = fileName;
-        this.fileName = MD5Calculator.getMD5(originalFileName.getBytes());
-        this.partList = partList;
+    public FileInfo(Path path, ArrayList<FilePair> chunkList) {
+        this.subpath = path.toString();
+        MD5Name = initMD5Name();
+        this.chunkList = chunkList;
     }
-    public FileInfo(String fileName, SmallFile[] pieces) {
-        this.fileName = fileName;
-        partList = new ArrayList<>(pieces.length);
-        for ( int i = 0; i < pieces.length; i++ ) {
-            partList.add(pieces[i].getFilePair());
+    public FileInfo(Path path, ArrayList<FilePair> chunkList, long syncTime) {
+        this.subpath = path.toString();
+        MD5Name = initMD5Name();
+        this.chunkList = chunkList;
+        this.syncTime = syncTime;
+    }
+    public FileInfo(Path path, SmallFile[] pieces) {
+        this.subpath = path.toString();
+        MD5Name = initMD5Name();
+        if ( pieces == null ) {
+            chunkList = new ArrayList<>(0);
+        } else {
+            chunkList = new ArrayList<>(pieces.length);
+            for ( int i = 0; i < pieces.length; i++ ) {
+                chunkList.add(pieces[i].getFilePair());
+            } 
         }
     }
-    public String getOriginalFileName() {
-        return originalFileName;
+    private String initMD5Name() {
+        return MD5Calculator.getMD5(subpath.toString().getBytes());
     }
-    public String getFileName() {
-        return fileName;
+    public String getMD5Name() {
+        return MD5Name;
     }
-    public ArrayList<FilePair> getPartList() {
-        return partList;
+    public Path getSubpath() {
+        return Paths.get(subpath);
     }
-    public void setPartList(ArrayList<FilePair> partList) {
-        this.partList = partList;
+    public ArrayList<FilePair> getChunkList() {
+        return chunkList;
+    }
+    public void setChunkList(ArrayList<FilePair> chunkList) {
+        this.chunkList = chunkList;
     }
     /**
      * update the synchronization time
      * this method should be called on server side
      * never on client side
      */
-    public void updateSyncTime() {
-        Date date = new Date();
-        syncTime = date.getTime();
+    public void updateSyncTime(long syncTime) {
+        this.syncTime = syncTime;
     }
     public long getSyncTime() {
         return syncTime;
+    }
+    @Override
+    public boolean equals(Object obj) {
+        if (obj != null && obj.getClass() == FileInfo.class) {
+            FileInfo another = (FileInfo) obj;
+            if (this.getMD5Name().equals(another.getMD5Name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = 5;
+        hash = 97 * hash + Objects.hashCode(this.MD5Name);
+        return hash;
     }
 }

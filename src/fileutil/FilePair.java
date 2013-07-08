@@ -7,11 +7,11 @@ import java.io.Serializable;
  * @author
  */
 public class FilePair implements Serializable {
-    private String fileName; // the file name with full path in MD5 format
-    private String md5Str;
+    private String chunkFileName; // the file name of the chunk (in MD5 format)
+    private String md5Str; // the hash of the chunk
     
-    public FilePair(String fileName, String md5Str) {
-        this.fileName = fileName;
+    public FilePair(String chunkFileName, String md5Str) {
+        this.chunkFileName = chunkFileName;
         this.md5Str = md5Str;
     }
     /**
@@ -21,7 +21,7 @@ public class FilePair implements Serializable {
      * different; 1 if file names are same but MD5 are different
      */
     public int equalsTo(FilePair pair) {
-        if ( ! fileName.equals(pair.getFileName())) {
+        if ( ! chunkFileName.equals(pair.getChunkFileName())) {
             return -1;
         }
         if (md5Str.equals(pair.getMD5())) {
@@ -29,8 +29,8 @@ public class FilePair implements Serializable {
         }
         return 1;
     }
-    public String getFileName() {
-        return fileName;
+    public String getChunkFileName() {
+        return chunkFileName;
     }
     public String getMD5() {
         return md5Str;

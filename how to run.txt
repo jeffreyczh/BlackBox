@@ -1,7 +1,8 @@
 chdir D:\MSS_assignment\cics525\BlackBox\build\classes
 
 Windows:
-java -cp %CLASSPATH;.;fileutil/;rmiClass/;server; server/ServerDriver
+java -cp %CLASSPATH;.;fileutil/;rmiClass/;common/;server/; server/ServerDriver
+java -cp %CLASSPATH;.;fileutil/;rmiClass/;common/;client/; client/ClientDriver
 
 Linux:
 java -cp %CLASSPATH:fileutil/:rmiClass/:server/: server/ServerDriver

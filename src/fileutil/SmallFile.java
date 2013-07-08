@@ -1,18 +1,24 @@
 
 package fileutil;
 
+import java.io.Serializable;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 /**
  * The "file" which is splitted up from the original file
  * @author
  */
-public class SmallFile {
+public class SmallFile implements Serializable{
     private FilePair pair;
-    private String fileBelongsTo; // the full name of the file that this chunk belongs to (MD5)
+    private String subpath; // the subpath of the file that this chunk belongs to
+    private String recordName; // MD5 of the subpath
     private byte[] data;
     
-    public SmallFile(FilePair pair, String fileBelongsTo, byte[] data) {
+    public SmallFile(FilePair pair, Path subpath, byte[] data) {
         this.pair = pair;
-        this.fileBelongsTo = fileBelongsTo;
+        this.subpath = subpath.toString();
+        recordName = MD5Calculator.getMD5(subpath.toString().getBytes());
         this.data = data;
     }
    
@@ -23,8 +29,10 @@ public class SmallFile {
     public byte[] getData() {
         return data;
     }
-    
-    public String getFileBelongsTo() {
-        return fileBelongsTo;
+    public Path getSubPath() {
+        return Paths.get(subpath);
+    }
+    public String getRecordName() {
+        return recordName;
     }
 }

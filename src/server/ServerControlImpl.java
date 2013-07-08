@@ -5,26 +5,24 @@ import common.ActionId;
 import common.ActionPair;
 import fileutil.FileInfo;
 import fileutil.FilePair;
+import fileutil.FileUtil;
+import fileutil.Packet;
 import fileutil.SmallFile;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.swing.Timer;
 import rmiClass.ServerControl;
 
@@ -37,7 +35,7 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
     private Integer load = 0; // the chunks that currently need to be transferred
     private HashMap<ActionId, Timer> timerMap = new HashMap<>(); // the map of timers to detect the transfer time out for each user
     final public static int TIME_OUT = 600000; // the time out is set to 10 min
-    private HashMap<ActionId, SmallFile[]> chunksMap = new HashMap<>(); // the map for the buffer holds the chunks transferred by each user
+    private HashMap<ActionId, ArrayList<SmallFile>> chunksMap = new HashMap<>(); // the map for the buffer holds the chunks transferred by each user
     private HashMap<ActionId, Integer> loadMap = new HashMap<>(); // the map for the remained load for each transfer action
     
     public ServerControlImpl() throws RemoteException {
@@ -55,56 +53,61 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
     public ActionPair checkFileInfo(String userName, FileInfo fileInfo) throws RemoteException {
         ActionId actionId = new ActionId(userName, new Date().getTime());
         ArrayList<FilePair> resultList = new ArrayList<>();
-        File localFile = Paths.get(userName, fileInfo.getFileName()).toFile();
-        if ( localFile.exists() ) {
+        File serverRecord = ( Paths.get(userName, ".metadata", fileInfo.getMD5Name()) ).toFile();
+        if ( serverRecord.exists() ) {
             try {
-                /* lock the file */
-                FileLock lock = new RandomAccessFile(localFile, "rw").getChannel().lock();
-                /* read the general file info from the file */
-                ObjectInputStream ois =  new ObjectInputStream(
-                                                new FileInputStream(localFile));
-                 FileInfo localFileInfo = (FileInfo) ois.readObject();
-                 ois.close();
+                /* lock the record */
+                RandomAccessFile raf = new RandomAccessFile(serverRecord, "rw");
+                FileLock lock = raf.getChannel().lock();
+                /* read the general file info from the record */
+                 FileInfo serverFileInfo = (FileInfo) FileUtil.readObjectFromFile(serverRecord, raf);
                 /* compare the MD5 of each part */
-                ArrayList<FilePair> localPartList = localFileInfo.getPartList();
-                ArrayList<FilePair> clientPartList = fileInfo.getPartList();
-                if (localPartList.size() > clientPartList.size()) {
-                    /* delete the extra parts */
-                    for ( int i = clientPartList.size(); i < localPartList.size(); i++ ) {
-                        String path = localPartList.remove(i).getFileName();
+                ArrayList<FilePair> serverChunkList = serverFileInfo.getChunkList();
+                ArrayList<FilePair> clientChunkList = fileInfo.getChunkList();
+                if (serverChunkList.size() > clientChunkList.size()) {
+                    /* delete the extra chunks */
+                    int serverListLength = serverChunkList.size();
+                    for ( int i = clientChunkList.size(); i < serverListLength; i++ ) {
+                        String chunkFileName = serverChunkList.remove(clientChunkList.size()).getChunkFileName();
+                        Path chunkPath = Paths.get(userName, chunkFileName);
                         try {
-                            Files.delete(Paths.get(path));
+                            Files.delete(chunkPath);
                         } catch (IOException ex) {
-                            System.out.println("[Error] Fail to remove the extra parts of file: " + path);
+                            System.out.println("[Error] Fail to remove the extra parts of file: " + chunkPath);
                         }
                     }
                     /* update the info */
-                    localFileInfo.setPartList(localPartList);
-                    ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(localFile));
-                    oos.writeObject(localFileInfo);
-                    oos.close();
+                    serverFileInfo.setChunkList(serverChunkList);
+                    serverFileInfo.updateSyncTime(actionId.getActionTime());
+                    FileUtil.writeObjectToFile(serverRecord, raf, serverFileInfo);
                 }
-                for ( int i = 0; i < clientPartList.size(); i++ ) {
+                for ( int i = 0; i < clientChunkList.size(); i++ ) {
                     try {
-                        FilePair localfp = localPartList.get(i);
-                        FilePair clientfp = clientPartList.get(i);
+                        FilePair localfp = serverChunkList.get(i);
+                        FilePair clientfp = clientChunkList.get(i);
                         if ( clientfp.equalsTo(localfp) == 1 ) {
                             resultList.add(clientfp);
                         }
                     } catch (IndexOutOfBoundsException indexEx) {
                         /* more chunks are in the client */
-                        resultList.add(clientPartList.get(i));
+                        resultList.add(clientChunkList.get(i));
                     }
                 }
                 lock.release();
+                raf.close();
             } catch (IOException ex) {
-                ex.printStackTrace();
-            } catch (ClassNotFoundException ex) {
                 ex.printStackTrace();
             }
         } else {
             /* the file does not exist on the server, need to upload everything */
-            resultList = new ArrayList<>(fileInfo.getPartList());
+            resultList = new ArrayList<>(fileInfo.getChunkList());
+            if (resultList.isEmpty()) {
+                /*
+                 * the file in the client is empty
+                 * only create a record for it but not create any chunks and don't need to upload the file
+                 */
+                createEmptyRecord(userName, fileInfo, actionId.getActionTime());
+            }
         }
         ActionPair actionPair = new ActionPair(resultList, actionId);
         /* prepare for the transfer */
@@ -117,23 +120,61 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
         return load;
     }
 
-    public void addLoad(int load) {
+    private void addLoad(int load) {
         synchronized(this.load) {
             this.load += load;
         }
     }
  
-    public void reduceLoad(int load) {
+    private void reduceLoad(int load) {
         synchronized(this.load) {
             this.load -= load;
         }
     }
-
+    /**
+     * upload a chunk to the server
+     * @param actionid
+     * @param chunk
+     * @param isLastChunk
+     * @return the server time stamp, indicating the time when sync finishes. -1 if not finish yet
+     * @throws RemoteException 
+     */
     @Override
-    public void sendChunk(ActionPair actionPair, SmallFile chunk, boolean isLastChunk) throws RemoteException {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    public long uploadChunk(ActionId actionid, SmallFile chunk, boolean isLastChunk) throws RemoteException {
+        ArrayList<SmallFile> list = chunksMap.get(actionid);
+        list.add(chunk);
+        chunksMap.put(actionid, list);
+        finishOneChunk(actionid);
+        long serverTime = -1;
+        if (isLastChunk) {
+            /* all chunks have been uploaded */
+            serverTime = new Date().getTime();
+            updateFile(actionid.getUser(), list, serverTime);
+            finishTransfer(actionid);
+        }
+        return serverTime;
     }
-    
+    /**
+     * reset the timeout timer and reduce the load after one chunk is transferred
+     * @param actionid 
+     */
+    private void finishOneChunk(ActionId actionid) {
+        timerMap.get(actionid).restart();
+        reduceLoad(1);
+        int load = loadMap.get(actionid);
+        loadMap.put(actionid, --load);
+    }
+    /**
+     * the whole transer operation is finished
+     * stop the timeout timer and delete the entries in maps
+     * @param actionid 
+     */
+    private void finishTransfer(ActionId actionid) {
+        timerMap.get(actionid).stop();
+        timerMap.remove(actionid);
+        loadMap.remove(actionid);
+        chunksMap.remove(actionid);
+    }
     private void prepareTransfer(ActionPair actionPair) {
         int load = actionPair.getFilePairList().size();
         if (load == 0) {
@@ -141,9 +182,10 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
             return;
         }
         ActionId actionId = actionPair.getActionId();
-        SmallFile[] smallfiles = new SmallFile[load];
-        chunksMap.put(actionId, smallfiles);
+        ArrayList<SmallFile> list = new ArrayList<>(load);
+        chunksMap.put(actionId, list);
         loadMap.put(actionId, load);
+        addLoad(load);
         setupTimer(actionId);
     }
     
@@ -162,6 +204,157 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
         timer.setRepeats(false);
         timerMap.put(actionId, timer);
         timer.start();
+    }
+    
+    private void updateFile(String userName, ArrayList<SmallFile> list, long serverTime) {
+        SmallFile smallfile = list.get(0);
+        File serverRecord = ( Paths.get(userName, ".metadata", smallfile.getRecordName()) ).toFile();
+        
+        try {
+            /* lock the file */
+            RandomAccessFile raf = new RandomAccessFile(serverRecord, "rw");
+            FileLock lock = raf.getChannel().lock();
+            for (int i = 0; i < list.size(); i++ ) {
+                SmallFile sf = list.get(i);
+                Path chunkPath = Paths.get(userName, sf.getFilePair().getChunkFileName());
+                Files.write(chunkPath, sf.getData());
+            }
+            /* update the server record */
+            updateRecord(serverRecord, raf, list, serverTime);
+            lock.release();
+            raf.close();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+    /**
+     * create a server record for the file which length is 0 bytes.
+     * @param userName
+     * @param fileinfo
+     * @param serverTime 
+     */
+    private void createEmptyRecord(String userName, FileInfo fileinfo, long serverTime) {
+        File serverRecord = ( Paths.get(userName, ".metadata", fileinfo.getMD5Name()) ).toFile();
+        fileinfo.updateSyncTime(serverTime);
+        try {
+            /* lock the file */
+            RandomAccessFile raf = new RandomAccessFile(serverRecord, "rw");
+            FileLock lock = raf.getChannel().lock();
+            FileUtil.writeObjectToFile(serverRecord, raf, fileinfo);
+            lock.release();
+            raf.close();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+    /**
+     * update the server record
+     * @param recordFile
+     * @param raf
+     * @param list 
+     */
+    private void updateRecord(File recordFile, RandomAccessFile raf, ArrayList<SmallFile> list, long syncTime) {
+        FileInfo record = null;
+        if (recordFile.length() != 0) {
+            /* the serverRecord already exists */
+            record = (FileInfo) FileUtil.readObjectFromFile(recordFile, raf);
+            ArrayList<FilePair> chunkList = record.getChunkList();
+            for (int i = 0; i < list.size(); i++) {
+                FilePair fp = list.get(i).getFilePair();
+                boolean isNew = true;
+                /*
+                 * search the list in the record
+                 * if exists, replace it
+                 * otherwise add into the record
+                 */
+                for ( int j = 0; j < chunkList.size(); j++ ) {
+                    if (chunkList.get(j).equalsTo(fp) == 1) {
+                        chunkList.set(j, fp);
+                        isNew = false;
+                        break;
+                    }
+                }
+                if (isNew) {
+                    /* the filepair does not exist in the record */
+                    chunkList.add(fp);
+                }
+            }
+            record.setChunkList(chunkList);
+            record.updateSyncTime(syncTime);
+        } else {
+            /* the server record doesn't exist, create a new record */
+            ArrayList<FilePair> pairList = new ArrayList<>(list.size());
+            for (int i = 0; i < list.size(); i++) {
+                pairList.add(list.get(i).getFilePair());
+            }
+            record = new FileInfo(list.get(0).getSubPath(), pairList, syncTime);
+        }
+        FileUtil.writeObjectToFile(recordFile, raf, record);
+    }
+
+    @Override
+    public void deleteFile(String userName, String fileNameHash) throws RemoteException {
+        File metaFile = Paths.get(userName, ".metadata", fileNameHash).toFile();
+        try {
+            RandomAccessFile raf = new RandomAccessFile(metaFile, "rw");
+            FileLock lock = raf.getChannel().lock();
+            FileInfo record = (FileInfo) FileUtil.readObjectFromFile(metaFile, raf);
+            /* delete chunks of this file */
+            ArrayList<FilePair> chunkList = record.getChunkList();
+            for (int i = 0; i < chunkList.size(); i++) {
+                FilePair fp = chunkList.get(i);
+                Files.deleteIfExists(Paths.get(userName, fp.getChunkFileName()));
+            }
+            lock.release();
+            raf.close();
+            metaFile.delete();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    @Override
+    public ArrayList<FileInfo> getRecord(String userName) throws RemoteException {
+        File[] files = Paths.get(userName, ".metadata").toFile().listFiles();
+        ArrayList<FileInfo> recordList = new ArrayList<>();
+        try {
+            for (int i = 0; i < files.length; i++) {
+                RandomAccessFile raf = new RandomAccessFile(files[i], "rw");
+                FileInfo record = (FileInfo) FileUtil.readObjectFromFile(files[i], raf);
+                recordList.add(record);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return recordList;
+    }
+
+    @Override
+    public Packet download(String userName, String subpathHash) throws RemoteException {
+        ArrayDeque<byte[]> dataQueue = new ArrayDeque<>();
+        /* check the file record to get chunks information */
+        File serverRecord = Paths.get(userName, ".metadata", subpathHash).toFile();
+        long syncTime = -1; // -1 means the record does not exist
+        if (serverRecord.exists()) {
+            try {
+                RandomAccessFile raf = new RandomAccessFile(serverRecord, "rw");
+                FileLock lock = raf.getChannel().lock();
+                FileInfo record = (FileInfo) FileUtil.readObjectFromFile(serverRecord, raf);
+                ArrayList<FilePair> chunkList = record.getChunkList();
+                /* read all chunks of this file */
+                for (int i = 0; i < chunkList.size(); i++) {
+                    FilePair fp = chunkList.get(i);
+                    byte[] b = Files.readAllBytes(Paths.get(userName, fp.getChunkFileName()));
+                    dataQueue.add(b);
+                }
+                syncTime = record.getSyncTime();
+                lock.release();
+                raf.close();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+        return new Packet(dataQueue, syncTime);
     }
     
 }
