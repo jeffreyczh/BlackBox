@@ -3,6 +3,7 @@ package server;
 
 import fileutil.FileInfo;
 import fileutil.FilePair;
+import fileutil.FileUtil;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
@@ -13,6 +14,8 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.RandomAccessFile;
 import java.net.MalformedURLException;
+import java.nio.channels.FileLock;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -21,6 +24,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Random;
 import javax.swing.Timer;
 import rmiClass.RedirectorControl;
 import rmiClass.ServerSyncControl;
@@ -32,10 +36,9 @@ import rmiClass.ServerSyncControl;
 public class Server {
     
     final private int heartbeatInterval = 3000;
+    public Integer load = 0; // the chunks that currently need to be transferred
     private ArrayList<String> redirectorList = new ArrayList<>(3); // list of all ip addresses of re-director
     private ArrayList<String> serverList = new ArrayList<>(3); // list of all ip addresses of servers
-    private ServerControlImpl serverctrl;
-    private ServerSyncControlImpl syncctrl;
     
     public Server(String privateIP, String publicIP) throws RemoteException {
        
@@ -53,8 +56,8 @@ public class Server {
        String[] userName = new String[] {"user1", "user2"};
        checkUserFolder(userName);
        
-       serverctrl = new ServerControlImpl();
-       syncctrl = new ServerSyncControlImpl();
+       
+       ServerSyncControlImpl syncctrl = new ServerSyncControlImpl(this);
        LocateRegistry.createRegistry(47805);
        try {
                Naming.rebind("rmi://" + privateIP + ":47805/ServerSync", syncctrl);
@@ -64,14 +67,15 @@ public class Server {
        }
        checkUpdate(userName);
        
+       ServerControlImpl serverctrl = new ServerControlImpl(this);
        try {
                Naming.rebind("rmi://" + privateIP + ":47805/Server", serverctrl);
        } catch (MalformedURLException e) {
                System.out.println("[Error] Fail to bind the method with url");
                System.exit(1);
        }
-       //sendHeartbeat(); // get the return value to sync amoung servers
-       //initHeartbeatTimer();
+       sendHeartbeat(); // get the return value to sync amoung servers
+       initHeartbeatTimer();
        
        System.out.println("Server is ready!");
     }
@@ -84,7 +88,7 @@ public class Server {
             String rdIP = redirectorList.get(i);
             try {
                 RedirectorControl rdCtrl = (RedirectorControl) Naming.lookup("rmi://" + rdIP + ":51966/Redirect");
-                rdCtrl.heartbeat(serverctrl.getLoad());
+                rdCtrl.heartbeat(load);
             } catch (Exception ex){ }
         }
     }
@@ -117,15 +121,18 @@ public class Server {
      */
     private void checkUpdate(String[] userNames) {
         System.out.println("Checking Update ... ...");
+        int whichtocheck = new Random().nextInt(serverList.size()); // randomly choose a server to get backup 
         for (int i = 0; i < userNames.length; i++) {
-            for (int j = 0; j < serverList.size(); j++) {
-                String serverIP = serverList.get(j);
+            for(int j = 0; j < serverList.size(); j++ ) {
+                String serverIP = serverList.get(whichtocheck % serverList.size());
                 try {
                     ServerSyncControl syncCtrl = (ServerSyncControl) Naming.lookup("rmi://" + serverIP + ":47805/ServerSync");
                     ArrayList<FileInfo> recordList = syncCtrl.checkUpdate(userNames[i]);
                     applyUpdate(userNames[i], recordList, syncCtrl);
                     break;
-                } catch (Exception ex){ }
+                } catch (Exception ex){ 
+                    whichtocheck++;
+                }
             }
         }
         System.out.println("Finish");
@@ -178,22 +185,27 @@ public class Server {
      * @throws IOException
      * @throws ClassNotFoundException 
      */
-    private void deleteLocalFile(String userName, 
+    public void deleteLocalFile(String userName, 
                                    String recordName) throws IOException, ClassNotFoundException {
         Path recordPath = Paths.get(userName, ".metadata", recordName);
-            ObjectInputStream ois = new ObjectInputStream(
-                                        new FileInputStream(
-                                            recordPath.toFile()));
-            FileInfo record = (FileInfo) ois.readObject();
-            ois.close();
-            ArrayList<FilePair> fpList = record.getChunkList();
-            /* delete all chunks */
-            for ( int i = 0; i < fpList.size(); i++ ) {
-                String chunkName = fpList.get(i).getChunkFileName();
-                Files.delete(Paths.get(userName, chunkName));
-            }
-            /* delete the record */
-            Files.delete(recordPath);
+        RandomAccessFile raf = new RandomAccessFile(recordPath.toFile(), "rw");
+        FileLock lock = raf.getChannel().lock();
+        FileInfo record = (FileInfo) FileUtil.readObjectFromFile(recordPath.toFile(), raf);
+        lock.release();
+        raf.close();
+        /* delete the record */
+        /* busy-waiting util the file is not being used */
+        while (Files.exists(recordPath)) {
+            try {
+                Files.delete(recordPath);
+            } catch (FileSystemException ex) {}
+        }
+        ArrayList<FilePair> fpList = record.getChunkList();
+        /* delete all chunks */
+        for ( int i = 0; i < fpList.size(); i++ ) {
+            String chunkName = fpList.get(i).getChunkFileName();
+            Files.deleteIfExists(Paths.get(userName, chunkName));
+        }
     }
     private void checkDownload (String userName,
                                   ArrayList<FileInfo> localList, 
@@ -243,10 +255,53 @@ public class Server {
         ArrayList<FilePair> chunkList = fileinfo.getChunkList();
         for ( int i = 0; !queue.isEmpty(); i++ ) {
             String chunkName = chunkList.get(i).getChunkFileName();
-            File file = Paths.get(userName, chunkName).toFile();
-            RandomAccessFile raf = new RandomAccessFile(file, "rw");
-            raf.write(queue.pop());
-            raf.close();
+            Files.write(Paths.get(userName, chunkName), queue.pop());
         }
+    }
+    /**
+     * send the file to all the other servers as backup
+     * @param userName
+     * @param pack 
+     * @param toDelete tell if this file needs to be deleted, true if yes
+     */
+    public void sendUpdate(String userName, FileInfo record, boolean toDelete) {
+        System.out.println("Backup processing ... ...");
+        ArrayDeque<byte[]> dataQueue = new ArrayDeque<>();
+        if ( !toDelete ) {
+            try {
+                RandomAccessFile raf = new RandomAccessFile(
+                                        Paths.get(userName, ".metadata", record.getMD5Name()).toFile(), 
+                                        "rw");
+                FileLock lock = raf.getChannel().lock();
+                dataQueue = getChunks(userName, record);
+                lock.release();
+                raf.close();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+        for (int i = 0; i < serverList.size(); i++) {
+            String serverIP = serverList.get(i);
+            try {
+                ServerSyncControl syncCtrl = (ServerSyncControl) Naming.lookup("rmi://" + serverIP + ":47805/ServerSync");
+                syncCtrl.sendUpdate(userName, new SyncPacket(record, dataQueue), toDelete);
+            } catch (Exception ex){ }
+        }
+        System.out.println("Backup Finish");
+    }
+    public ArrayDeque<byte[]> getChunks(String userName, FileInfo record) {
+        ArrayDeque<byte[]> dataQueue = new ArrayDeque<>();
+        try {
+            ArrayList<FilePair> chunkList = record.getChunkList();
+            /* read all chunks of this file */
+            for (int i = 0; i < chunkList.size(); i++) {
+                FilePair fp = chunkList.get(i);
+                byte[] b = Files.readAllBytes(Paths.get(userName, fp.getChunkFileName()));
+                dataQueue.add(b);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return dataQueue;
     }
 }

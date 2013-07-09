@@ -7,8 +7,6 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 
 import rmiClass.RedirectorControl;
@@ -46,44 +44,43 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
     @Override
     public String redirect() throws RemoteException {
         /* redirector to the server with minimum load */
-        return minLoad();
+        String ip = minLoad();
+        try {
+            System.out.println("Client: " + RemoteServer.getClientHost() + " is redirected to Server: " + ip);
+        } catch (ServerNotActiveException ex) {
+        }
+        return ip;
     }
     
     /**
-     * 
+     * heatbeat operation created by server
      * @param load
-     * @return the server with least load before the new server added. it is used for the 
-     * new server to choose a already running server to sync when it power on
      * @throws RemoteException 
      */
     @Override
-    public String heartbeat(Integer load) throws RemoteException {
+    public void heartbeat(Integer load) throws RemoteException {
         String IPAddr = new String();
-        String minLoadServer = null;
         try {
             IPAddr = RemoteServer.getClientHost();
         } catch (ServerNotActiveException ex) {
             ex.printStackTrace();
         }
-        minLoadServer = updateHeartbeatTable(IPAddr, load);
+        updateHeartbeatTable(IPAddr, load);
         synchronized(serverTable) {
             serverTable.put(IPAddr, load);
         }
-        return minLoadServer;
     }
     /**
      * update the heartbeat table and detect the failure server
      * @param IPAddr the ip address of the server that sent the heartbeat
-     * @return the ip of the server which has least load before the new server added
      */
-    private String updateHeartbeatTable(String IPAddr, int load) {
+    private void updateHeartbeatTable(String IPAddr, int load) {
         synchronized(serverTable) {
             
             if ( !heartbeatTable.containsKey(IPAddr) ) {
-                String minLoadServer = minLoad();
                 heartbeatTable.put(IPAddr, load);
                 System.out.println("Server " + IPAddr + " is now added.");
-                return minLoadServer;
+                return;
             }
 
             Iterator it = heartbeatTable.keySet().iterator();
@@ -105,7 +102,7 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
                 heartbeatTable.put(ip, lostCount);
             }
         }
-        return null;
+        return;
     }
     /**
      * find the server with the minimum load

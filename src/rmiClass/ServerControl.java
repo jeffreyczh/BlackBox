@@ -20,5 +20,4 @@ public interface ServerControl extends Remote{
     public Packet download(String userName, String subpathHash) throws RemoteException;
     public void deleteFile(String userName, String fileNameHash) throws RemoteException;
     public ArrayList<FileInfo> getRecord(String userName) throws RemoteException;
-    public int getLoad() throws RemoteException;
 }

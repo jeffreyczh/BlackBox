@@ -13,5 +13,5 @@ import java.rmi.RemoteException;
 public interface RedirectorControl extends Remote {
     public boolean login(String userName) throws RemoteException; 
     public String redirect() throws RemoteException;
-    public String heartbeat(Integer load) throws RemoteException;
+    public void heartbeat(Integer load) throws RemoteException;
 }

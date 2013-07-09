@@ -14,5 +14,5 @@ import server.SyncPacket;
 public interface ServerSyncControl extends Remote{
     public ArrayList<FileInfo> checkUpdate(String userName) throws RemoteException;
     public SyncPacket getUpdate(String userName, String recordName) throws RemoteException;
-    
+    public void sendUpdate(String userName, SyncPacket pack, boolean toDelete) throws RemoteException;
 }

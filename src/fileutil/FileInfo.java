@@ -38,6 +38,13 @@ public class FileInfo implements Serializable {
             } 
         }
     }
+    /**
+     * this constructor is only used for telling to delete a file
+     * @param MD5Name 
+     */
+    public FileInfo(String MD5Name) {
+        this.MD5Name = MD5Name;
+    }
     private String initMD5Name() {
         return MD5Calculator.getMD5(subpath.toString().getBytes());
     }

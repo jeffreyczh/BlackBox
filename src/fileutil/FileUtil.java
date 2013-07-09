@@ -21,7 +21,7 @@ import java.nio.file.Paths;
  */
 public class FileUtil {
 	//final public static int CHUNK_SIZE = 4 * 1000000; // 4MB per chunk
-         final public static int CHUNK_SIZE = 2; // 2k per chunk
+         final public static int CHUNK_SIZE = 200; // 200 Byte per chunk
 	
         /**
          * split up the file to chunks

@@ -31,7 +31,7 @@ import rmiClass.ServerControl;
  * @author
  */
 public class Client {
-    final public static int CHECK_INTERVAL = 20000; // check update every 20 seconds
+    final public static int CHECK_INTERVAL = 6000; // check update every 6 seconds
     private String userName;
     private Path syncPath; // the path of the sync folder, eg. C:\blackboxsync
     private Path metaPath; // the path of the folder that stores meta data
@@ -56,9 +56,9 @@ public class Client {
         redirectorList.add("23.22.127.255");
         
         /* log in and validate the user name first */
-        /*if ( ! logIn(userName) ) {
+        if ( ! logIn(userName) ) {
             System.exit(1);
-        }*/
+        }
         this.userName = userName;
         /* check update first */
         checkUpdate();
@@ -80,7 +80,7 @@ public class Client {
      */
     private boolean logIn(String userName) {
          while (true) {
-            String ipAddr = redirectorList.get(whichIP % 3);
+            String ipAddr = redirectorList.get(whichIP % redirectorList.size());
             try {
                 /* log in and validate the user name */
                 RedirectorControl rdCtrl = (RedirectorControl) Naming.lookup("rmi://" + ipAddr + ":51966/Redirect");
@@ -346,9 +346,8 @@ public class Client {
                 }
             }
             Files.delete(findLocalRecord(dir));
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             System.out.println("Fail to delete a local file: " + dir);
-            ex.printStackTrace();
         }
     }
     /**

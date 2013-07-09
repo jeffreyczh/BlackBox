@@ -23,6 +23,8 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.Timer;
 import rmiClass.ServerControl;
 
@@ -31,15 +33,15 @@ import rmiClass.ServerControl;
  * @author
  */
 public class ServerControlImpl extends UnicastRemoteObject implements ServerControl{
-    
-    private Integer load = 0; // the chunks that currently need to be transferred
+    private Server server;
     private HashMap<ActionId, Timer> timerMap = new HashMap<>(); // the map of timers to detect the transfer time out for each user
     final public static int TIME_OUT = 600000; // the time out is set to 10 min
     private HashMap<ActionId, ArrayList<SmallFile>> chunksMap = new HashMap<>(); // the map for the buffer holds the chunks transferred by each user
     private HashMap<ActionId, Integer> loadMap = new HashMap<>(); // the map for the remained load for each transfer action
     
-    public ServerControlImpl() throws RemoteException {
+    public ServerControlImpl(Server server) throws RemoteException {
         super();
+        this.server = server;
     }
     
     /**
@@ -54,6 +56,7 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
         ActionId actionId = new ActionId(userName, new Date().getTime());
         ArrayList<FilePair> resultList = new ArrayList<>();
         File serverRecord = ( Paths.get(userName, ".metadata", fileInfo.getMD5Name()) ).toFile();
+        boolean needSync = false; // if it needs to synchronize among server
         if ( serverRecord.exists() ) {
             try {
                 /* lock the record */
@@ -80,6 +83,7 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
                     serverFileInfo.setChunkList(serverChunkList);
                     serverFileInfo.updateSyncTime(actionId.getActionTime());
                     FileUtil.writeObjectToFile(serverRecord, raf, serverFileInfo);
+                    needSync = true;
                 }
                 for ( int i = 0; i < clientChunkList.size(); i++ ) {
                     try {
@@ -95,6 +99,9 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
                 }
                 lock.release();
                 raf.close();
+                if (needSync) {
+                    server.sendUpdate(userName, serverFileInfo, false);
+                }
             } catch (IOException ex) {
                 ex.printStackTrace();
             }
@@ -115,20 +122,16 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
         return actionPair;
     }
     
-    @Override
-    public int getLoad() {
-        return load;
-    }
 
     private void addLoad(int load) {
-        synchronized(this.load) {
-            this.load += load;
+        synchronized(server.load) {
+            server.load += load;
         }
     }
  
     private void reduceLoad(int load) {
-        synchronized(this.load) {
-            this.load -= load;
+        synchronized(server.load) {
+            server.load -= load;
         }
     }
     /**
@@ -221,8 +224,10 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
             }
             /* update the server record */
             updateRecord(serverRecord, raf, list, serverTime);
+            FileInfo record = (FileInfo) FileUtil.readObjectFromFile(serverRecord, raf);
             lock.release();
             raf.close();
+            server.sendUpdate(userName, record, false);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -246,6 +251,7 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+        server.sendUpdate(userName, fileinfo, false);
     }
     /**
      * update the server record
@@ -290,27 +296,17 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
             record = new FileInfo(list.get(0).getSubPath(), pairList, syncTime);
         }
         FileUtil.writeObjectToFile(recordFile, raf, record);
+        
     }
 
     @Override
     public void deleteFile(String userName, String fileNameHash) throws RemoteException {
-        File metaFile = Paths.get(userName, ".metadata", fileNameHash).toFile();
         try {
-            RandomAccessFile raf = new RandomAccessFile(metaFile, "rw");
-            FileLock lock = raf.getChannel().lock();
-            FileInfo record = (FileInfo) FileUtil.readObjectFromFile(metaFile, raf);
-            /* delete chunks of this file */
-            ArrayList<FilePair> chunkList = record.getChunkList();
-            for (int i = 0; i < chunkList.size(); i++) {
-                FilePair fp = chunkList.get(i);
-                Files.deleteIfExists(Paths.get(userName, fp.getChunkFileName()));
-            }
-            lock.release();
-            raf.close();
-            metaFile.delete();
+            server.deleteLocalFile(userName, fileNameHash);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            System.out.println("Fail to delete the file: " + fileNameHash);
         }
+        server.sendUpdate(userName, new FileInfo(fileNameHash), true);
     }
 
     @Override
@@ -340,13 +336,7 @@ public class ServerControlImpl extends UnicastRemoteObject implements ServerCont
                 RandomAccessFile raf = new RandomAccessFile(serverRecord, "rw");
                 FileLock lock = raf.getChannel().lock();
                 FileInfo record = (FileInfo) FileUtil.readObjectFromFile(serverRecord, raf);
-                ArrayList<FilePair> chunkList = record.getChunkList();
-                /* read all chunks of this file */
-                for (int i = 0; i < chunkList.size(); i++) {
-                    FilePair fp = chunkList.get(i);
-                    byte[] b = Files.readAllBytes(Paths.get(userName, fp.getChunkFileName()));
-                    dataQueue.add(b);
-                }
+                dataQueue = server.getChunks(userName, record);
                 syncTime = record.getSyncTime();
                 lock.release();
                 raf.close();

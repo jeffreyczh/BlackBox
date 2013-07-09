@@ -37,6 +37,7 @@ public class FileOps implements Runnable{
     private Path path; // the full path of the file
     private Path subpath; // the subpath of the file
     private String subpathHash; // the subpath of the file in MD5
+    public static int whichRedirector = 0;
     
     /* event list */
     final public static String DELETE = "_delete"; // delete a file on the server side
@@ -219,20 +220,19 @@ public class FileOps implements Runnable{
      * @return the server's IP
      */
     public static String askServerIP(ArrayList<String> redirectorList) {
-        return "54.242.71.176";
-        /*for (int i = 0; ; i++ ) {
-            String ipAddr = redirectorList.get(i % 3);
+        while(true) {
+            String ipAddr = redirectorList.get(whichRedirector % redirectorList.size());
             try {
                 RedirectorControl rdCtrl = (RedirectorControl) Naming.lookup("rmi://" + ipAddr + ":51966/Redirect");
                 String ip = rdCtrl.redirect();
-                System.out.println("Redirect to server: " + ip);
                 return ip;
-            } catch (RemoteException ex) {*/
+            } catch (RemoteException ex) {
                 /* the server may fail, connect to another server */
-           /*     System.out.println("Re-director: " + ipAddr + " has no response. Change to another Re-director.");
+                System.out.println("Re-director: " + ipAddr + " has no response. Change to another Re-director.");
+                whichRedirector++;
             }  catch (Exception e) {
                 e.printStackTrace();
             }
-        }*/
+        }
     }
 }
