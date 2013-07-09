@@ -189,7 +189,6 @@ public class Client {
                                         }
                                         break;
                                     default:
-                                        System.out.println("Surprise conflicting result !!!");
                                 }
                             }
                             if ( localRecord != null && fileInfo == null ) {
@@ -414,11 +413,15 @@ public class Client {
              (localMdfTime != fileMdfTime) ) {
             return 2;
         }
-        if ( (localSyncTime != serverSyncTime) &&
+        if ( (localSyncTime < serverSyncTime) &&
              (localMdfTime == fileMdfTime) ) {
             return 3;
         }
-        return 4;
+        if ( (localSyncTime < serverSyncTime) &&
+             (localMdfTime != fileMdfTime) ) {
+            return 4;
+        }
+        return 5;
     }
     /**
      * list all files in the given directory, including files in all folder

@@ -91,7 +91,7 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
                     lostCount = 0;
                 } else {
                     lostCount++;
-                    if ( lostCount == heartbeatTable.size() ) {
+                    if ( lostCount > heartbeatTable.size() ) {
                         /* connection is lost, remove from tables */
                         heartbeatTable.remove(ip);
                         serverTable.remove(ip);
