@@ -5,6 +5,7 @@ import java.rmi.server.RemoteServer;
 import java.rmi.server.ServerNotActiveException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 
@@ -46,7 +47,9 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
         /* redirector to the server with minimum load */
         String ip = minLoad();
         try {
-            System.out.println("Client: " + RemoteServer.getClientHost() + " is redirected to Server: " + ip);
+            System.out.println("Client: " + RemoteServer.getClientHost() + 
+                                    " is redirected to Server: " + ip + 
+                                        "\t" + Calendar.getInstance().getTime());
         } catch (ServerNotActiveException ex) {
         }
         return ip;
@@ -79,7 +82,8 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
             
             if ( !heartbeatTable.containsKey(IPAddr) ) {
                 heartbeatTable.put(IPAddr, load);
-                System.out.println("Server " + IPAddr + " is now added.");
+                System.out.println("Server " + IPAddr + " is now added." + 
+                                        "\t" + Calendar.getInstance().getTime());
                 return;
             }
 
@@ -95,7 +99,8 @@ public class RedirectorControlImpl extends UnicastRemoteObject implements Redire
                         /* connection is lost, remove from tables */
                         heartbeatTable.remove(ip);
                         serverTable.remove(ip);
-                        System.out.println("Server " + ip + " is failed.");
+                        System.out.println("Server " + ip + " is failed." + 
+                                        "\t" + Calendar.getInstance().getTime());
                         continue;
                     }
                 }

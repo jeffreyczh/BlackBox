@@ -67,6 +67,7 @@ public class Client {
 
             @Override
             public void actionPerformed(ActionEvent e) {
+                checkFolder();
                 checkUpdate();
             }
             

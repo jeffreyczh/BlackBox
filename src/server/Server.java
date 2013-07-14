@@ -24,6 +24,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Random;
 import javax.swing.Timer;
 import rmiClass.RedirectorControl;
@@ -265,7 +266,8 @@ public class Server {
      * @param toDelete tell if this file needs to be deleted, true if yes
      */
     public void sendUpdate(String userName, FileInfo record, boolean toDelete) {
-        System.out.println("Backup processing ... ...");
+        System.out.println("Backup processing ... ..." + 
+                            "\t" + Calendar.getInstance().getTime());
         ArrayDeque<byte[]> dataQueue = new ArrayDeque<>();
         if ( !toDelete ) {
             try {
@@ -287,7 +289,8 @@ public class Server {
                 syncCtrl.sendUpdate(userName, new SyncPacket(record, dataQueue), toDelete);
             } catch (Exception ex){ }
         }
-        System.out.println("Backup Finish");
+        System.out.println("Backup Finish"+ 
+                           "\t" + Calendar.getInstance().getTime());
     }
     public ArrayDeque<byte[]> getChunks(String userName, FileInfo record) {
         ArrayDeque<byte[]> dataQueue = new ArrayDeque<>();

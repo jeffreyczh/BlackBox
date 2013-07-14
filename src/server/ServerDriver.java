@@ -1,7 +1,5 @@
 package server;
 
-import java.rmi.RemoteException;
-
 /**
  *
  * @author

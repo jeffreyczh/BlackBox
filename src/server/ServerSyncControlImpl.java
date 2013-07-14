@@ -8,7 +8,6 @@ import fileutil.FileInfo;
 import fileutil.FilePair;
 import fileutil.FileUtil;
 import java.io.File;
-import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
@@ -17,8 +16,6 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import rmiClass.ServerSyncControl;
 
 /**
