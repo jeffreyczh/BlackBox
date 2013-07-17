@@ -49,7 +49,7 @@ public class Server {
        
        serverList.add("54.242.71.176");
        serverList.add("54.234.8.26");
-       serverList.add("50.19.34.25");
+       serverList.add("54.235.18.29");
        
        int myselfIndex = serverList.indexOf(publicIP);
        serverList.remove(myselfIndex);
