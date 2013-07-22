@@ -121,23 +121,24 @@ public class Client {
         System.out.println("Checking update...");
         /* check if there are any files have been deleted */
         checkDeletion();
-        /* get the records from the server */
-        final ArrayList<FileInfo> serverRecords = getServerRecord();
-        /* 
-         * check if there is a file that exists on the server but not on client
-         * if yes, download this file
-         */
-        for ( int i = 0; i < serverRecords.size(); i++ ) {
-            FileInfo serverRecord = serverRecords.get(i);
-            if ( !searchLocalFile(serverRecord) ) {
-                /* download the file */
-                Path downloadPath = syncPath.resolve(serverRecord.getSubpath());
-                if ( taskSet.add(downloadPath) ) {
-                    new Thread(new FileOps(Client.this, FileOps.DOWNLOAD, downloadPath)).start();
-                }
-            }
-        }
+
         try {
+             /* get the records from the server */
+            final ArrayList<FileInfo> serverRecords = getServerRecord();
+           /*
+            * check if there is a file that exist
+            * if yes, download this file
+            */
+           for ( int i = 0; i < serverRecords.size(); i++ ) {
+               FileInfo serverRecord = serverRecords.get(i);
+               if ( !searchLocalFile(serverRecord) ) {
+                   /* download the file */
+                   Path downloadPath = syncPath.resolve(serverRecord.getSubpath());
+                   if ( taskSet.add(downloadPath) ) {
+                       new Thread(new FileOps(Client.this, FileOps.DOWNLOAD, downloadPath)).start();
+                   }
+               }
+           }
             /* visit all files in the sync folder */
             Files.walkFileTree(syncPath, 
                     new SimpleFileVisitor<Path>() {
@@ -225,8 +226,10 @@ public class Client {
                             return FileVisitResult.CONTINUE;
                         }
                     });
-        } catch (IOException ex) {
-            ex.printStackTrace();
+        } catch (Exception ex) {
+            /* the server may fail, connect to another server */
+             System.out.println("Server has no response. We will try again.");
+             return;
         }
         System.out.println("Finish checking update.");
     }
@@ -278,19 +281,11 @@ public class Client {
      * ask for the records from the server
      * @return list of all records belongs to this user
      */
-    private ArrayList<FileInfo> getServerRecord() {
+    private ArrayList<FileInfo> getServerRecord() throws Exception{
         String serverIP = FileOps.askServerIP(redirectorList);
         while (true) {
-            try {
-                ServerControl serverCtrl = (ServerControl) Naming.lookup("rmi://" + serverIP + ":47805/Server");
-                return serverCtrl.getRecord(userName);
-            } catch (RemoteException ex) {
-                /* the server may fail, connect to another server */
-                System.out.println("Server: " + serverIP + " has no response. Ask server IP again.");
-                //serverIP = askServerIP();
-            }  catch (Exception e) {
-                e.printStackTrace();
-            }
+            ServerControl serverCtrl = (ServerControl) Naming.lookup("rmi://" + serverIP + ":47805/Server");
+            return serverCtrl.getRecord(userName);        
         }
     }
     /**
