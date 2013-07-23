@@ -47,9 +47,9 @@ public class Server {
        redirectorList.add("54.234.9.61");
        redirectorList.add("23.22.127.255");
        
-       serverList.add("54.242.71.176");
+       serverList.add("54.227.140.192");
        serverList.add("54.234.8.26");
-       serverList.add("54.235.18.29");
+       serverList.add("54.227.171.164");
        
        int myselfIndex = serverList.indexOf(publicIP);
        serverList.remove(myselfIndex);
