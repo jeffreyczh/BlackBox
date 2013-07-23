@@ -126,7 +126,7 @@ public class Client {
              /* get the records from the server */
             final ArrayList<FileInfo> serverRecords = getServerRecord();
            /*
-            * check if there is a file that exist
+            * check if there is a file that exists in servers but not in the local machine
             * if yes, download this file
             */
            for ( int i = 0; i < serverRecords.size(); i++ ) {
@@ -227,7 +227,10 @@ public class Client {
                         }
                     });
         } catch (Exception ex) {
-            /* the server may fail, connect to another server */
+            /* 
+             * the server may fail while checking updates
+             * try checking updates next time
+             */
              System.out.println("Server has no response. We will try again.");
              return;
         }
